@@ -139,10 +139,6 @@ struct test_header {
 #define KEY_GESTURE_RIGHT_ARROW 255 // draw right arrow
 #define KEY_GESTURE_LETTER_W    256 // draw letter "W"
 #define KEY_GESTURE_LETTER_M    257 // draw letter "M"
-#define KEY_GESTURE_LTR_SWIPE   258 // swipe left to right
-#define KEY_GESTURE_RTL_SWIPE   259 // swipe right to left
-#define KEY_GESTURE_UTD_SWIPE   260 // swipe up to down
-#define KEY_GESTURE_DTU_SWIPE   261 // swipe down to up
 #endif
 // carlo@oneplus.net 2015-05-25, end.
 
@@ -154,6 +150,22 @@ struct test_header {
 #define BIT5 (0x1 << 5)
 #define BIT6 (0x1 << 6)
 #define BIT7 (0x1 << 7)
+
+int LeftVee_gesture = 0; //">"
+int RightVee_gesture = 0; //"<"
+int DouSwip_gesture = 0; // "||"
+int Circle_gesture = 0; // "O"
+int UpVee_gesture = 0; //"V"
+int DownVee_gesture = 0; //"^"
+int DouTap_gesture = 0; //"double tap"
+
+int Left2RightSwip_gesture=0;//"(-->)"
+int Right2LeftSwip_gesture=0;//"(<--)"
+int Up2DownSwip_gesture =0;//"up to down |"
+int Down2UpSwip_gesture =0;//"down to up |"
+
+int Wgesture_gesture =0;//"(W)"
+int Mgesture_gesture =0;//"(M)"
 #endif
 
 /*********************for Debug LOG switch*******************/
@@ -512,10 +524,11 @@ struct synaptics_ts_data {
 	int letter_o_enable;
 	int letter_w_enable;
 	int letter_m_enable;
-	int ltr_swipe_enable;
-	int rtl_swipe_enable;
-	int utd_swipe_enable;
-	int dtu_swipe_enable;
+	int gesture_enable;
+	int is_suspended;
+    atomic_t is_stop;
+    spinlock_t lock;
+
 };
 
 /*Virtual Keys Setting Start*/
@@ -1488,7 +1501,7 @@ static void gesture_judge(struct synaptics_ts_data *ts)
         case UNICODE_DETECT:
 			gesture =   (gesture_buffer[2] == 0x77 && gesture_buffer[3] == 0x00) ? Wgesture :
 					    (gesture_buffer[2] == 0x6d && gesture_buffer[3] == 0x00) ? Mgesture :
-                        UnknownGesture;
+                        UnkownGesture;
 			break;
 		case 0:
 			gesture = UnknownGesture;
@@ -1535,22 +1548,6 @@ static void gesture_judge(struct synaptics_ts_data *ts)
 		case Mgesture:
 			if(ts->letter_m_enable)
 			keyCode = KEY_GESTURE_LETTER_M;
-			break;
-		case Left2RightSwip:
-			if(ts->ltr_swipe_enable)
-			keyCode = KEY_GESTURE_LTR_SWIPE;
-			break;
-		case Right2LeftSwip:
-			if(ts->rtl_swipe_enable)
-			keyCode = KEY_GESTURE_RTL_SWIPE;
-			break;
-		case Up2DownSwip:
-			if(ts->utd_swipe_enable)
-			keyCode = KEY_GESTURE_UTD_SWIPE;
-			break;
-		case Down2UpSwip:
-			if(ts->dtu_swipe_enable)
-			keyCode = KEY_GESTURE_DTU_SWIPE;
 			break;
 		default:
 			keyCode = 0;
@@ -3465,10 +3462,6 @@ static int	synaptics_input_init(struct synaptics_ts_data *ts)
 	set_bit(KEY_GESTURE_TWO_SWIPE, ts->input_dev->keybit);
 	set_bit(KEY_GESTURE_LETTER_W, ts->input_dev->keybit);
 	set_bit(KEY_GESTURE_LETTER_M, ts->input_dev->keybit);
-	set_bit(KEY_GESTURE_LTR_SWIPE, ts->input_dev->keybit);
-	set_bit(KEY_GESTURE_RTL_SWIPE, ts->input_dev->keybit);
-	set_bit(KEY_GESTURE_UTD_SWIPE, ts->input_dev->keybit);
-	set_bit(KEY_GESTURE_DTU_SWIPE, ts->input_dev->keybit);
 		set_bit(KEY_MENU , ts->input_dev->keybit);
 		set_bit(KEY_HOMEPAGE , ts->input_dev->keybit);
 		set_bit(KEY_BACK , ts->input_dev->keybit);
@@ -3831,10 +3824,6 @@ TS_ENABLE_FOPS(right_arrow);
 TS_ENABLE_FOPS(letter_o);
 TS_ENABLE_FOPS(letter_w);
 TS_ENABLE_FOPS(letter_m);
-TS_ENABLE_FOPS(ltr_swipe);
-TS_ENABLE_FOPS(rtl_swipe);
-TS_ENABLE_FOPS(utd_swipe);
-TS_ENABLE_FOPS(dtu_swipe);
 
 // chenggang.li@BSP.TP modified for oppo 2014-08-08 create node
 /******************************start****************************/
@@ -3989,31 +3978,6 @@ static int init_synaptics_proc(void)
 		ret = -ENOMEM;
 		printk(KERN_INFO"init_synaptics_proc: Couldn't create proc entry\n");
 	}
-
-	prEntry_tmp = proc_create("ltr_swipe_enable", 0666, prEntry_tp, &tp_ltr_swipe_proc_fops);
-	if(prEntry_tmp == NULL){
-		ret = -ENOMEM;
-		printk(KERN_INFO"init_synaptics_proc: Couldn't create proc entry\n");
-	}
-
-	prEntry_tmp = proc_create("rtl_swipe_enable", 0666, prEntry_tp, &tp_rtl_swipe_proc_fops);
-	if(prEntry_tmp == NULL){
-		ret = -ENOMEM;
-		printk(KERN_INFO"init_synaptics_proc: Couldn't create proc entry\n");
-	}
-
-	prEntry_tmp = proc_create("utd_swipe_enable", 0666, prEntry_tp, &tp_utd_swipe_proc_fops);
-	if(prEntry_tmp == NULL){
-		ret = -ENOMEM;
-		printk(KERN_INFO"init_synaptics_proc: Couldn't create proc entry\n");
-	}
-
-	prEntry_tmp = proc_create("dtu_swipe_enable", 0666, prEntry_tp, &tp_dtu_swipe_proc_fops);
-	if(prEntry_tmp == NULL){
-		ret = -ENOMEM;
-		printk(KERN_INFO"init_synaptics_proc: Couldn't create proc entry\n");
-	}
-
 
 	prEntry_tmp = proc_create("keypad_enable", 0666, prEntry_tp, &keypad_enable_proc_fops);
 	if(prEntry_tmp == NULL)
